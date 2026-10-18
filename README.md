@@ -116,6 +116,102 @@ Get-ScheduledTask -TaskPath "\Microsoft\Windows\Application Experience\*" | ? St
 
 ---
 
+## Создание ISO из готовой сборки
+
+После того как система вычищена и сделан `sysprep /generalize /oobe /shutdown` (Шаг 3),
+можно упаковать её в установочный ISO, чтобы ставить на другие машины без ручной зачистки.
+
+### Вариант А. Автоустановочный ISO «как у Microsoft» (через install.wim)
+
+**1. Снимите образ диска в `.wim`:**
+
+Загрузитесь с WinPE (или второй ВМ с DISM), подключите диск собранной системы
+(например, `D:`) и выполните:
+
+```cmd
+DISM /Capture-Image /ImageFile:C:\wezo\install.wim /CaptureDir:D:\ ^
+     /Name:"Windows 11 Wezograph" /Description:"Sysprep generalizied" /Compress:max
+```
+
+> Диск должен быть именно после `/generalize /shutdown`, иначе образ не развернётся
+> корректно на другом железе.
+
+**2. Соберите папку дистрибутива:**
+
+Распакуйте оригинальный ISO Windows 11 в папку, например `C:\wezo\iso\`, и замените
+в ней файл образа:
+
+```
+C:\wezo\iso\
+├── boot\               ← из оригинального ISO (не трогать)
+├── efi\                ← из оригинального ISO
+├── sources\
+│   ├── install.wim     ← ВАШ новый install.wim (заменяет оригинальный)
+│   └── ...             ← остальное из оригинального ISO
+├── autounattend.xml    ← ваш ответный файл (в корне — подхватывается автоматически)
+└── setup.exe, ...
+```
+
+Опционально обновите индекс образов (если меняли метаданные):
+
+```cmd
+DISM /Get-WimInfo /WimFile:C:\wezo\iso\sources\install.wim
+```
+
+**3. Создайте загрузочный ISO.** Один из способов:
+
+*oscdimg (официальный способ, из Windows ADK):*
+
+```cmd
+"C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg\oscdimg.exe" ^
+  -m -o -u2 -udfver102 ^
+  -bootdata:2#p0,e,bC:\wezo\iso\boot\etfsboot.com#pEF,e,bC:\wezo\iso\efi\microsoft\boot\efisys.bin ^
+  C:\wezo\iso C:\wezo\Wezograph_Win11.iso
+```
+
+*Aльтернатива без ADK — AnyBurn или ImgBurn:* «Create ISO image from folder» → укажите
+папку `C:\wezo\iso`, в настройках задайте загрузочный бинарник `boot\etfsboot.com`
+(ImgBurn: Options → Boot Disc → Load file). Для записи на флешку вместо ISO можно
+использовать **Ventoy** (скопируйте туда файлы дистрибутива + autounattend.xml) или
+**Rufus** (режим DD-образа/ISO оригинала, затем подмените install.wim на флешке).
+
+Готово: `Wezograph_Win11.iso` ставится на любую машину — при наличии `autounattend.xml`
+в корне установка пройдёт автоматически до готового рабочего стола.
+
+### Вариант Б. ISO с автоустановкой + развёртыванием образа (unattended DISM-Install)
+
+Если хотите, чтобы ISO сам форматировал диск и применял ваш `.wim` без участия человека,
+добавьте в `autounattend.xml` секции `DiskConfiguration` + `ImageInstall` (указывает на
+`sources\install.wim`, индекс 1) — тогда достаточно обычного UEFI-bootable ISO из Варианта А.
+
+### Вариант В. Быстрый ISO из готовой ВМ (клон-диск → ISO)
+
+Для переноса целиком (со всеми настройками, но **без generalize так делать нельзя!**):
+
+1. После `sysprep /generalize /oobe /shutdown` сконвертируйте диск ВМ в RAW:
+   `qemu-img convert -O raw disk.vhdx disk.raw` (или снимок VirtualBox → VDI→RAW).
+2. ISO с Linux live-флешки снимите образ: `dd if=disk.raw of=image.img`.
+3. Такой носитель клонируется на диск утилитой dd/Ventoy — это уже не установщик Windows,
+   а «дубликат» системы. Подходит только для одинакового железа/UEFI-настроек.
+
+### Проверка ISO перед распространением
+
+- Смонтируйте ISO и убедитесь, что `sources\install.wim` весит ожидаемо и содержит нужный индекс.
+- Загрузитесь с ISO в тестовой ВМ (Secure Boot может требовать подпись — отключите или
+  используйте стандартный boot-код от оригинального ISO, он подписан).
+- После установки проверьте `Get-AppxPackage -AllUsers` — пакеты не должны «воскреснуть».
+
+### Частые проблемы
+
+| Симптом | Причина / решение |
+|---|---|
+| Установка зависает на «Подготовка файлов» | install.wim снят до `/generalize`; снимайте образ только после generalize+shutdown |
+| BSOD INACCESSIBLE_BOOT_DEVICE при установке | в ISO попал old-style BIOS boot без нужных драйверов; добавьте драйверы в wim: `DISM /Add-Driver` |
+| ISO не грузится с UEFI | неверные флаги oscdimg; используйте команду выше с `-bootdata:2#p0...#pEF...` |
+| OOBE всё равно спрашивает аккаунт MS | `autounattend.xml` лежит не в корне ISO или не в `C:\Panels\Unattend\` на целевом диске |
+
+---
+
 ## Вариант с автоматическим входом в Audit Mode после generalize
 
 Если хотите, чтобы после `sysprep /generalize` машина сама возвращалась в аудит
