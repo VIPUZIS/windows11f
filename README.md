@@ -259,3 +259,164 @@ Defender-планировщика.
   в скриптах есть опция `-KeepStore`.
 - Sysprep **нельзя** запускать больше 3 раз на одной установке без обхода `SkipRearm` —
   для итеративной сборки снимайте снапшот ВМ после каждого успешного generalize.
+
+---
+
+## Вопросы / Contacts
+
+Если остались вопросы — пишите на почту:
+**[lasewel.id@gmail.com](mailto:lasewel.id@gmail.com?subject=Windows11F&body=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82!%0A%0A%D0%9C%D0%BE%D0%B9%20%D0%B2%D0%BE%D0%BF%D1%80%D0%BE%D1%81:%20)**
+(тема письма «Windows11F» подставится автоматически при клике)
+
+If you have any questions, write to:
+**[lasewel.id@gmail.com](mailto:lasewel.id@gmail.com?subject=Windows11F&body=Hi!%0A%0AMy%20question:%20)**
+(subject line "Windows11F" is filled in automatically when you click)
+
+---
+
+# Windows 11 Wezograph — an ultralight build via Sysprep + Audit Mode (English)
+
+An ultralight Windows 11 build: nearly all UWP apps, telemetry, Cortana, Edge (where possible),
+OneDrive, a bunch of services and background tasks are removed. Optionally — full removal of
+Microsoft Defender. Everything is done **in Audit Mode** before capturing the image, so that
+`generalize` + `OOBE` yield a clean system without "ghosts" of removed packages.
+
+> ⚠️ **Disclaimer.** Removing Defender and deep stripping reduce security and may break
+> Windows Update, Store, search and major feature updates (23H2→24H2 etc.). Do this on your
+> own machine and only if you understand the consequences. Test in a VM first!
+
+## Repository structure
+
+```
+.
+├── README.md                  ← this guide (RU + EN)
+├── scripts/
+│   ├── 00-audit-entry.ps1     ← quick entry into audit mode from a running system
+│   ├── 10-remove-apps.ps1     ← UWP/Provisioned package removal (a lot, aggressively)
+│   ├── 11-strip-telemetry.ps1 ← telemetry, scheduled tasks, DiagTrack, CustomerExperience
+│   ├── 12-disable-services.ps1← service disabling (optional / autostart / removal modes)
+│   ├── 13-remove-defender.ps1 ← ⚠ full Microsoft Defender removal (+ Tuning/FLRM)
+│   ├── 14-cleanup.ps1         ← Temp, DISM component cleanup, hiberfil, minimal pagefile
+│   └── 99-sysprep-finalize.ps1← final run of all steps + sysprep /generalize /oobe /shutdown
+├── autounattend.xml           ← OOBE answer file: auto-login as admin, skip checks, no MS account
+└── UnattendAudit.xml          ← Sysprep answer file: /generalize + immediate return to Audit Mode
+```
+
+## Step-by-step instructions (EN)
+
+### Step 0. Preparation
+
+1. A Windows 11 ISO (any edition; Pro recommended).
+2. A test VM (VirtualBox/VMware/Hyper-V) or a second disk. **Do not do this on a working PC without a backup.**
+
+### Step 1. Install Windows up to the OOBE screen
+
+1. Boot from the ISO, partition/format the disk, install the system.
+2. When OOBE starts ("Let's name your device") — **do not complete it**.
+   Press **Ctrl+Shift+F3**. Windows will create the built-in Administrator account and reboot
+   straight into **Audit Mode** (a desktop without the OOBE shell).
+
+   Alternative from an already installed system: run `scripts\00-audit-entry.ps1` as administrator
+   (it performs `sysprep /audit /reboot`).
+
+### Step 2. Scripts in Audit Mode
+
+Open PowerShell **as Administrator** in Audit Mode and run the scripts in order
+(copy the `scripts` folder to the target machine beforehand, e.g. to a separate partition or USB):
+
+```powershell
+# 1. Remove apps (lots of UWP + provisioned, so they don't reinstall)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\10-remove-apps.ps1
+
+# 2. Strip telemetry and scheduled tasks
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\11-strip-telemetry.ps1
+
+# 3. Disable services (choose a mode: with -Remove some can actually be deleted)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\12-disable-services.ps1
+
+# 4. ⚠ Remove Microsoft Defender (optional, but "for real")
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\13-remove-defender.ps1
+
+# 5. Junk files, DISM component-store cleanup, hiberfil, etc.
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\14-cleanup.ps1
+```
+
+Or everything in one command with a final Sysprep shutdown:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\99-sysprep-finalize.ps1
+```
+
+> If `13-remove-defender.ps1` requires a reboot mid-process — reboot, enter Audit Mode again
+> (it stays active until the first `/generalize`) and finish the remaining steps.
+
+### Step 3. Finalization — Sysprep Generalize
+
+Once everything is stripped:
+
+```cmd
+C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown /unattend:C:\wezo\autounattend.xml
+```
+
+What it does:
+- `/generalize` — resets SID, driver database, removes leftover accounts and "ghost" entries
+  of deleted AppX packages from the profile;
+- `/oobe` — shows a clean OOBE on next boot (or completes it automatically via autounattend);
+- `/shutdown` — shuts the machine down, ready for cloning/image capture.
+
+### Step 4. (Optional) Auto-return to Audit Mode after generalize
+
+If you want the machine to return to Audit Mode after `sysprep /generalize`
+(e.g. for a two-pass build), use `UnattendAudit.xml`:
+
+```cmd
+C:\Windows\System32\Sysprep\sysprep.exe /generalize /audit /reboot /unattend:C:\wezo\UnattendAudit.xml
+```
+
+## Creating an ISO from the finished build (EN summary)
+
+1. After `sysprep /generalize /oobe /shutdown` (machine is off), capture the disk image with
+   DISM (`/Capture-Image`) to get your own `install.wim`.
+2. Copy the original ISO contents to a folder (e.g. `C:\wezo\iso`) and replace
+   `sources\install.wim` with your new one; put `autounattend.xml` in the ISO root —
+   Setup picks it up automatically.
+3. Build a bootable ISO with `oscdimg` (Windows ADK) or AnyBurn/ImgBurn using `boot\etfsboot.com`
+   as the boot binary. For USB flash drives, **Ventoy** or **Rufus** also work
+   (swap `install.wim` on the stick afterwards).
+
+The resulting `Wezograph_Win11.iso` installs on any machine — with `autounattend.xml` in the root,
+setup runs unattended straight to a ready desktop.
+
+### What exactly gets removed (short list, EN)
+
+**Apps:** Copilot, Clipchamp, Teams, TikTok/Instagram/Spotify and other "sponsors", Bing clients,
+News, Weather, Xbox (GameBar remains functional but disabled), YourPhone, Maps, Sound Recorder,
+Media Player (Legacy), 3D Builder/Paint, Power Automate, Solitaire, Sticky Notes, Wallet,
+Alarms (optional), Delve Forms, To Do, Notepad (→ classic/Win32 replacement, `-KeepNotepad` option),
+Whiteboard, Feedback Hub, Get Help, Microsoft Start, Family, RetailDemo, and all Provisioned
+variants of these packages.
+
+**Telemetry:** DiagTrack, ConnectedUserExperiencesCsp, dmwappushservice, ScheduledTelemetry,
+CustomerExperienceImprovementProgram, all `\Application Experience*`, `Data Integrity`,
+`SoftwareProtectionPlatform` background tasks, Unified Telemetry Platform tasks, NPS, PIE, CEIP,
+SmartScreen policies (option), DiLink/Link-to-Phone tasks.
+
+**Services (disabled/deleted):** PrintNotify (opt.), Fax, Touch Keyboard (opt.), WerMgr,
+WMPNetworkSvc, DevicesFlowUserSvc, OneSyncSvc, MessagingService, CDPUserSvc, PimIndexMaint,
+SharedAccess, RemoteRegistry (opt.), WSearch (opt.), Spooler (opt., `-KeepPrint`), SysMain,
+wbengine (opt.) and dozens more — see the arrays in the script.
+
+**Defender:** WinDefend, WdNisSvc, wscsvc (SecurityHealthService), Sense, TamperProtection,
+plus removal of the `Microsoft.Windows.SecHealthUI` Appx, excision of the `WdFilter/WdNisDrv/WdBoot`
+filters via a bcdedit-safe path (rename approach on next boot), removal of Defender scheduler GPOs.
+
+## Known limitations (EN)
+
+- `Appx` packages protected by GVLK/System components (Cred Dialog UI, partially
+  ShellExperiencePack) may fail to remove — the scripts log skips and continue.
+- After Defender removal, major feature updates may roll back or require restoring Defender
+  before updating.
+- After a full strip, the Windows Store may require `wsreset`/metadata reinstallation —
+  the scripts include a `-KeepStore` option.
+- Sysprep **must not** be run more than 3 times per installation without the `SkipRearm`
+  workaround — for iterative builds, snapshot the VM after each successful generalize.
