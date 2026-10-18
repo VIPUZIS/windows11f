@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="#windows-11-wezograph--ультралёгкая-сборка-через-sysprep--audit-mode"><img src="https://img.shields.io/badge/%F0%9F%87%B7%F0%9F%87%BA_RU-critical?style=for-the-badge" alt="Русский"/></a>
+  <a href="#windows-11-wezograph--an-ultralight-build-via-sysprep--audit-mode-english"><img src="https://img.shields.io/badge/%F0%9F%87%AC%F0%9F%87%A7_EN-informational?style=for-the-badge" alt="English"/></a>
+</p>
+
+**🌐 Язык / Language:** [🇷🇹 Русский](#readme) · [🇬🇧 English](#windows-11-wezograph--an-ultralight-build-via-sysprep--audit-mode-english)
+
+<a id="top"></a>
+
 # Windows 11 Wezograph — ультралёгкая сборка через Sysprep + Audit Mode
 
 Сборка Windows 11, вычищенная до минимума: удалены почти все UWP-приложения, телеметрия,
@@ -276,6 +285,12 @@ If you have any questions, write to:
 
 # Windows 11 Wezograph — an ultralight build via Sysprep + Audit Mode (English)
 
+<p align="center">
+  <a href="#windows-11-wezograph--ультралёгкая-сборка-через-sysprep--audit-mode"><img src="https://img.shields.io/badge/%F0%9F%87%B7%F0%9F%87%BA_Смотреть_на_русском-critical?style=for-the-badge" alt="Читать на русском"/></a>
+</p>
+
+**🌐 Language:** [🇬🇧 English](#readme) · [🇷🇹 Русский](#windows-11-wezograph--ультралёгкая-сборка-через-sysprep--audit-mode)
+
 An ultralight Windows 11 build: nearly all UWP apps, telemetry, Cortana, Edge (where possible),
 OneDrive, a bunch of services and background tasks are removed. Optionally — full removal of
 Microsoft Defender. Everything is done **in Audit Mode** before capturing the image, so that
@@ -420,3 +435,10 @@ filters via a bcdedit-safe path (rename approach on next boot), removal of Defen
   the scripts include a `-KeepStore` option.
 - Sysprep **must not** be run more than 3 times per installation without the `SkipRearm`
   workaround — for iterative builds, snapshot the VM after each successful generalize.
+
+---
+
+<p align="center">
+  <a href="#windows-11-wezograph--ультралёгкая-сборка-через-sysprep--audit-mode"><img src="https://img.shields.io/badge/%F0%9F%87%B7%F0%9F%87%BA_Russian_version-critical?style=flat-square" alt="Русская версия"/></a>
+  <a href="#readme"><img src="https://img.shields.io/badge/%E2%86%91_Back_to_top-lightgrey?style=flat-square" alt="Наверх"/></a>
+</p>
